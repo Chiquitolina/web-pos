@@ -1,1 +1,1 @@
-export const environment = {"production": true, "storeName": "Mi helader\u00eda", "dbName": "heladeria-pos-v1", "currency": "ARS", "locale": "es-AR", "timeZone": "America/Argentina/Buenos_Aires"};
+export const environment = {"production": true, "storeName": "Web POS", "dbName": "heladeria-pos-v1", "currency": "ARS", "locale": "es-AR", "timeZone": "America/Argentina/Buenos_Aires"};
