@@ -1,0 +1,19 @@
+export interface CashCountRow { denomination:number; quantity:number }
+export type Payment = 'CASH' | 'MP' | 'CARD';
+export interface Category { id:string; name:string; gridoName:string; deletedAt?:string }
+export interface ProductFamily { id:string; name:string; category?:string; unitsPerBox?:number; boxesPerPack?:number; deletedAt?:string }
+export interface Product { id:string; name:string; gridoName?:string; category:string; price:number; familyId?:string; presentation?:string; unitsPerBox?:number; vatRate?:number; iceCreamGrams?:number; iceCreamScoops?:number; active:boolean; deletedAt?:string }
+export interface Item { productId:string; name:string; category?:string; gridoName?:string; categoryGridoName?:string; quantity:number; unitPrice:number; vatRate?:number; iceCreamGrams?:number; iceCreamScoops?:number; subtotal:number }
+export interface Sale { id:string; number:number; sessionId:string; weekId?:string; cancellation?:{at:string;reason:string}; at:string; items:Item[]; total:number; payment:Payment; received:number; change:number }
+export interface Movement { id:string; at:string; type:'IN'|'OUT'; amount:number; reason:string }
+export interface Closing { at:string; counted:number; cashCount?:CashCountRow[]; expected:number; difference:number; salesCount:number; total:number; payments:Record<Payment,number>; products:{id:string;name:string;quantity:number;total:number}[] }
+export interface Session { id:string; openedAt:string; opening:number; openingCount?:CashCountRow[]; movements:Movement[]; closing?:Closing }
+export type PriceAuditSource = 'PRODUCT_EDIT' | 'CATEGORY_EDIT' | 'FAMILY_EDIT' | 'CATALOG_IMPORT' | 'BACKUP_RESTORE';
+export type ProductAuditField = 'name'|'gridoName'|'category'|'price'|'vatRate'|'iceCreamGrams'|'iceCreamScoops'|'active'|'familyId'|'familyName'|'presentation'|'unitsPerBox'|'boxesPerPack'|'referenceUnitsPerBox';
+export interface ProductAuditChange { field:ProductAuditField; previous:string|number|boolean|null; next:string|number|boolean|null }
+export interface PriceAuditEntry { id:string; at:string; action:'PRODUCT_EDITED'|'PRICE_CHANGED'|'PRODUCT_ADDED'|'PRODUCT_REMOVED'|'BACKUP_RESTORED'; source:PriceAuditSource; productId:string|null; productName:string; gridoName:string; category:string; previousName?:string; changes?:ProductAuditChange[]; previousPrice:number|null; newPrice:number|null }
+export interface Data { version:1; priceAudit?:PriceAuditEntry[]; productFamilies?:ProductFamily[]; categories:string[]; categoryDetails?:Category[]; weeks:Week[]; products:Product[]; sales:Sale[]; sessions:Session[] }
+export const emptyData = ():Data => ({version:1,categories:['Granel','Envasados'],categoryDetails:[{id:'c0',name:'Granel',gridoName:'Granel'},{id:'c1',name:'Envasados',gridoName:'Envasados'}],weeks:[],products:[['Cucurucho 1 bocha','Granel',3500],['Cucurucho 2 bochas','Granel',5000],['1/4 kg','Granel',6000],['1/2 kg','Granel',10000],['1 kg','Granel',18000],['Bombón Escocés','Envasados',8500]].map(([name,category,price],i)=>({id:'p'+i,name:String(name),gridoName:String(name),category:String(category),price:Number(price)*100,...(i<5?{iceCreamGrams:[80,160,250,500,1000][i]}:{}),...(i<2?{iceCreamScoops:i+1}:{}),active:true})),sales:[],sessions:[]});
+
+export interface WeeklyReport { saleIds:string[]; salesCount:number; quantity:number; total:number; payments:Record<Payment,number>; products:{id:string;name:string;category:string;gridoName?:string;categoryGridoName?:string;iceCreamGrams?:number;iceCreamScoops?:number;recalculatedUnits?:number;quantity:number;total:number}[]; categories:{name:string;gridoName?:string;quantity:number;salesCount:number;total:number}[]; days:{date:string;salesCount:number;quantity:number;total:number}[] }
+export interface Week { id:string; startedAt:string; closing?:{at:string;report:WeeklyReport} }

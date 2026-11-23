@@ -1,0 +1,21 @@
+import 'fake-indexeddb/auto';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { PosDatabase } from '../src/app/core/indexed-db';
+import { saveProduct, renameCategory } from '../src/app/core/catalog';
+import { exportCatalog, importCatalog } from '../src/app/core/catalog-transfer';
+import { validateData } from '../src/app/core/domain';
+test('una edición guarda todos los campos anteriores/nuevos, incluyendo precio, estado y opcionales',async()=>{
+ const db=await PosDatabase.open(crypto.randomUUID());try{await db.update(d=>{saveProduct(d,'p0',{name:'Nuevo nombre',gridoName:'NEW',category:'Envasados',price:500000,vatRate:21,iceCreamGrams:240,iceCreamScoops:3});d.products[0].active=false;});const entry=(await db.queryPriceAudit(1)).rows[0];assert.equal(entry.action,'PRICE_CHANGED');assert.deepEqual(entry.changes!.map(c=>c.field),['name','gridoName','category','price','vatRate','iceCreamGrams','iceCreamScoops','active']);assert.deepEqual(entry.changes!.find(c=>c.field==='name'),{field:'name',previous:'Cucurucho 1 bocha',next:'Nuevo nombre'});assert.deepEqual(entry.changes!.find(c=>c.field==='vatRate'),{field:'vatRate',previous:null,next:21});assert.deepEqual(entry.changes!.find(c=>c.field==='active'),{field:'active',previous:true,next:false});const data=await db.exportData();assert.doesNotThrow(()=>validateData(data));}finally{db.close();}
+});
+test('ediciones sin precio y eliminación de opcionales son visibles; guardar igual no agrega registro',async()=>{
+ const db=await PosDatabase.open(crypto.randomUUID());try{await db.update(d=>{d.products[0].vatRate=0;d.products[0].iceCreamScoops=undefined;d.products[0].iceCreamGrams=0;});await db.update(d=>{delete d.products[0].vatRate;delete d.products[0].iceCreamGrams;});const r=await db.queryPriceAudit(1);assert.equal(r.total,2);assert.equal(r.rows[0].action,'PRODUCT_EDITED');assert.deepEqual(r.rows[0].changes,[{field:'vatRate',previous:0,next:null},{field:'iceCreamGrams',previous:0,next:null}]);await db.update(d=>{delete d.products[0].vatRate;});assert.equal((await db.queryPriceAudit(1)).total,2);}finally{db.close();}
+});
+test('importación con mismo precio registra otros campos y reasignación de categoría identifica el origen',async()=>{
+ const db=await PosDatabase.open(crypto.randomUUID());try{const file=exportCatalog(await db.exportData());file.products[0].name='Otro nombre';file.products[0].iceCreamGrams=160;file.products[0].iceCreamScoops=2;await db.update(d=>importCatalog(d,file),{priceSource:'CATALOG_IMPORT'});const row=(await db.queryPriceAudit(1)).rows[0];assert.equal(row.action,'PRODUCT_EDITED');assert.equal(row.source,'CATALOG_IMPORT');assert.deepEqual(row.changes!.map(c=>c.field),['name','iceCreamGrams','iceCreamScoops']);await db.update(d=>renameCategory(d,'c0','Helado x Bocha','BOCHA'),{priceSource:'CATEGORY_EDIT'});const rows=(await db.queryPriceAudit(1)).rows.filter(r=>r.source==='CATEGORY_EDIT');assert.equal(rows.length,5);assert.deepEqual(rows[0].changes,[{field:'category',previous:'Granel',next:'Helado x Bocha'}]);}finally{db.close();}
+});
+test('respaldos validan detalles y rechazan cambios de registros existentes, conservando historial anterior',async()=>{
+ const db=await PosDatabase.open(crypto.randomUUID());try{await db.update(d=>{d.products[0].name='Auditado';});const backup=await db.exportData();assert.deepEqual(validateData(backup),backup);const tampered=structuredClone(backup);tampered.priceAudit![0].changes![0].previous='Nombre inventado';await assert.rejects(db.restore(tampered),/mismo ID/);assert.deepEqual(await db.exportData(),backup);
+ for(const change of [{field:'unknown',previous:'a',next:'b'},{field:'active',previous:true,next:'false'},{field:'iceCreamGrams',previous:80,next:-1}]){const invalid=structuredClone(backup);invalid.priceAudit![0].changes=[change as any];await assert.rejects(db.restore(invalid),/cambios de producto/);assert.deepEqual(await db.exportData(),backup);}
+ const legacy=structuredClone(backup);legacy.priceAudit![0].action='PRICE_CHANGED';legacy.priceAudit![0].previousPrice=350000;legacy.priceAudit![0].newPrice=400000;delete legacy.priceAudit![0].changes;assert.doesNotThrow(()=>validateData(legacy));}finally{db.close();}
+});
